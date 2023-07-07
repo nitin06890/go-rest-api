@@ -40,5 +40,17 @@ func main() {
 		return c.JSON(http.StatusOK, product)
 	})
 
+	e.POST("/products", func(c echo.Context) error {
+		type body struct {
+			Name string `json:"product_name"`
+		}
+		var reqBody body
+		if err := c.Bind(&reqBody); err != nil {
+			return err
+		}
+		products = append(products, map[int]string{len(products) + 1: reqBody.Name})
+		return c.JSON(http.StatusCreated, "Product created")
+	})
+
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%s", port)))
 }
