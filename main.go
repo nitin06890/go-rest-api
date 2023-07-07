@@ -7,7 +7,18 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"gopkg.in/go-playground/validator.v9"
 )
+
+// PrductValidator echo validator for product
+type PrductValidator struct {
+	validator *validator.Validate
+}
+
+// Validate validates product request body
+func (p *PrductValidator) Validate(i interface{}) error {
+	return p.validator.Struct(i)
+}
 
 func main() {
 	port := os.Getenv("MY_APP_PORT")
@@ -16,6 +27,7 @@ func main() {
 	}
 
 	e := echo.New()
+	v := validator.New()
 	products := []map[int]string{{1: "mobiles"}, {2: "laptops"}, {3: "tablets"}}
 
 	e.GET("/", func(c echo.Context) error {
@@ -42,12 +54,17 @@ func main() {
 
 	e.POST("/products", func(c echo.Context) error {
 		type body struct {
-			Name string `json:"product_name"`
+			Name string `json:"product_name" validate:"required,min=4"`
 		}
 		var reqBody body
+		e.Validator = &PrductValidator{validator: v}
 		if err := c.Bind(&reqBody); err != nil {
 			return err
 		}
+		if err := c.Validate(reqBody); err != nil {
+			return err
+		}
+
 		products = append(products, map[int]string{len(products) + 1: reqBody.Name})
 		return c.JSON(http.StatusCreated, "Product created")
 	})
