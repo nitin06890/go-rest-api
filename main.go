@@ -35,9 +35,9 @@ func main() {
 	})
 	e.GET("/products/:id", func(c echo.Context) error {
 		var product map[int]string
+		pID, err := strconv.Atoi(c.Param("id"))
 		for _, p := range products {
 			for k := range p {
-				pID, err := strconv.Atoi(c.Param("id"))
 				if err != nil {
 					return err
 				}
@@ -67,6 +67,38 @@ func main() {
 
 		products = append(products, map[int]string{len(products) + 1: reqBody.Name})
 		return c.JSON(http.StatusCreated, "Product created")
+	})
+
+	e.PUT("/products/:id", func(c echo.Context) error {
+		var product map[int]string
+		pID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return err
+		}
+		for _, p := range products {
+			for k := range p {
+				if pID == k {
+					product = p
+				}
+			}
+		}
+		if product == nil {
+			return c.JSON(http.StatusNotFound, "Product not found")
+		}
+		type body struct {
+			Name string `json:"product_name" validate:"required,min=4"`
+		}
+		var reqBody body
+		e.Validator = &PrductValidator{validator: v}
+		if err := c.Bind(&reqBody); err != nil {
+			return err
+		}
+		if err := c.Validate(reqBody); err != nil {
+			return err
+		}
+
+		product[pID] = reqBody.Name
+		return c.JSON(http.StatusOK, product)
 	})
 
 	e.Logger.Fatal(e.Start(fmt.Sprintf(":%s", port)))
