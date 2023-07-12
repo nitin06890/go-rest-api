@@ -8,14 +8,20 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/random"
 	"github.com/nitin06890/go-rest-api/config"
 	"github.com/nitin06890/go-rest-api/handlers"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const (
+	// CorrelationID is the header key for correlation ID
+	CorrelationID = "X-Correlation-ID"
+)
+
 var (
-	c   *mongo.Client
+	// c   *mongo.Client
 	db  *mongo.Database
 	col *mongo.Collection
 	cfg config.Properties
@@ -41,8 +47,24 @@ func main() {
 	e := echo.New()
 	h := handlers.ProductHandler{Col: col}
 	e.Pre(middleware.RemoveTrailingSlash())
+	e.Pre(addCorrelationID)
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
 
 	e.Logger.Info("Listening on %s:%s ", cfg.Host, cfg.Port)
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)))
+}
+
+func addCorrelationID(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var newID string
+		id := c.Request().Header.Get(CorrelationID)
+		if id == "" {
+			newID = random.String(12)
+		} else {
+			newID = id
+		}
+		c.Request().Header.Set(CorrelationID, newID)
+		c.Response().Header().Set(CorrelationID, newID)
+		return next(c)
+	}
 }
