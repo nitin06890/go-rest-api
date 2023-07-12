@@ -40,17 +40,17 @@ func init() {
 	}
 	db = c.Database(cfg.DBName)
 	col = db.Collection(cfg.CollectionName)
-
 }
 
 func main() {
 	e := echo.New()
 	e.Logger.SetLevel(log.ERROR)
-	h := handlers.ProductHandler{Col: col}
+	h := &handlers.ProductHandler{Col: col}
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
 	e.GET("/products", h.GetProducts)
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
+	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
 
 	e.Logger.Info("Listening on %s:%s ", cfg.Host, cfg.Port)
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)))

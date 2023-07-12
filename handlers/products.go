@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 
 	"net/http"
 	"net/url"
@@ -51,13 +53,23 @@ func findProducts(ctx context.Context, q url.Values, col dbiface.CollectionAPI) 
 	for k, v := range q {
 		filter[k] = v[0]
 	}
+	if filter["_id"] != nil {
+		id, err := primitive.ObjectIDFromHex(filter["_id"].(string))
+		if err != nil {
+			log.Errorf("Unable to convert id to object id: %v", err)
+			return nil, err
+		}
+		filter["_id"] = id
+	}
 	cursor, err := col.Find(ctx, bson.M(filter))
 	if err != nil {
 		log.Errorf("Unable to find the products: %v", err)
+		return nil, err
 	}
 	err = cursor.All(ctx, &products)
 	if err != nil {
 		log.Errorf("Unable to decode the cursor to products: %v", err)
+		return nil, err
 	}
 	return products, nil
 }
@@ -106,4 +118,49 @@ func (h *ProductHandler) CreateProducts(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, IDs)
+}
+
+func modifyProduct(ctx context.Context, id string, reqBody io.ReadCloser, collection dbiface.CollectionAPI) (Product, error) {
+	var product Product
+	// convert the id to ObjectID, if err return 400
+	docID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Errorf("cannot convert to ObjectID :%v", err)
+		return product, err
+	}
+	filter := bson.M{"_id": docID}
+	res := collection.FindOne(ctx, filter)
+	if err := res.Decode(&product); err != nil {
+		log.Errorf("unable to decode to product :%v", err)
+		return product, err
+	}
+
+	//decode the request body to product, if err return 500
+	if err := json.NewDecoder(reqBody).Decode(&product); err != nil {
+		log.Errorf("unable to decode using reqbody : %v", err)
+		return product, err
+	}
+
+	// validate the product, if err return 400
+	if err := v.Struct(product); err != nil {
+		log.Errorf("unable to validate the struct : %v", err)
+		return product, err
+	}
+
+	// update the product, if err return 500
+	_, err = collection.UpdateOne(ctx, filter, bson.M{"$set": product})
+	if err != nil {
+		log.Errorf("Unable to update the product : %v", err)
+		return product, err
+	}
+	return product, nil
+}
+
+// UpdateProduct updates a product
+func (h *ProductHandler) UpdateProduct(c echo.Context) error {
+	product, err := modifyProduct(context.Background(), c.Param("id"), c.Request().Body, h.Col)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, product)
 }
