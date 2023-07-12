@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"net/http"
+	"net/url"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
@@ -44,9 +45,13 @@ func (p *ProductValidator) Validate(i interface{}) error {
 	return p.validator.Struct(i)
 }
 
-func findProducts(ctx context.Context, col dbiface.CollectionAPI) ([]Product, error) {
+func findProducts(ctx context.Context, q url.Values, col dbiface.CollectionAPI) ([]Product, error) {
 	var products []Product
-	cursor, err := col.Find(ctx, bson.M{})
+	filter := make(map[string]interface{})
+	for k, v := range q {
+		filter[k] = v[0]
+	}
+	cursor, err := col.Find(ctx, bson.M(filter))
 	if err != nil {
 		log.Errorf("Unable to find the products: %v", err)
 	}
@@ -59,7 +64,7 @@ func findProducts(ctx context.Context, col dbiface.CollectionAPI) ([]Product, er
 
 // GetProducts returns all the products
 func (h *ProductHandler) GetProducts(c echo.Context) error {
-	products, err := findProducts(context.Background(), h.Col)
+	products, err := findProducts(context.Background(), c.QueryParams(), h.Col)
 	if err != nil {
 		return err
 	}
