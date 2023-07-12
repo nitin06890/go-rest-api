@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 	"github.com/labstack/gommon/random"
 	"github.com/nitin06890/go-rest-api/config"
 	"github.com/nitin06890/go-rest-api/handlers"
@@ -45,9 +45,11 @@ func init() {
 
 func main() {
 	e := echo.New()
+	e.Logger.SetLevel(log.ERROR)
 	h := handlers.ProductHandler{Col: col}
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
+	e.GET("/products", h.GetProducts)
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
 
 	e.Logger.Info("Listening on %s:%s ", cfg.Host, cfg.Port)
