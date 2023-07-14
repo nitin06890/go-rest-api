@@ -49,6 +49,8 @@ func main() {
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
 	e.GET("/products", h.GetProducts)
+	e.GET("/products/:id", h.GetProduct)
+	e.DELETE("/products/:id", h.DeleteProduct)
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
 	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
 

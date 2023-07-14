@@ -83,6 +83,55 @@ func (h *ProductHandler) GetProducts(c echo.Context) error {
 	return c.JSON(http.StatusOK, products)
 }
 
+func findProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (Product, error) {
+	var product Product
+	docID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Errorf("cannot convert to ObjectID :%v", err)
+		return product, err
+	}
+	filter := bson.M{"_id": docID}
+	res := col.FindOne(ctx, filter)
+	if err := res.Decode(&product); err != nil {
+		log.Errorf("unable to decode to product :%v", err)
+		return product, err
+	}
+	return product, nil
+}
+
+// GetProduct returns a product
+func (h *ProductHandler) GetProduct(c echo.Context) error {
+	product, err := findProduct(context.Background(), c.Param("id"), h.Col)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, product)
+}
+
+func deleteProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (int64, error) {
+	docID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		log.Errorf("cannot convert to ObjectID :%v", err)
+		return 0, err
+	}
+	filter := bson.M{"_id": docID}
+	res, err := col.DeleteOne(ctx, filter)
+	if err != nil {
+		log.Errorf("unable to delete the product :%v", err)
+		return 0, err
+	}
+	return res.DeletedCount, nil
+}
+
+// DeleteProduct deletes a product
+func (h *ProductHandler) DeleteProduct(c echo.Context) error {
+	delCount, err := deleteProduct(context.Background(), c.Param("id"), h.Col)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, delCount)
+}
+
 func insertProducts(ctx context.Context, products []Product, col dbiface.CollectionAPI) ([]interface{}, error) {
 	var insertedIds []interface{}
 
