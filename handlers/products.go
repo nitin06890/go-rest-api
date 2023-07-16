@@ -47,7 +47,7 @@ func (p *ProductValidator) Validate(i interface{}) error {
 	return p.validator.Struct(i)
 }
 
-func findProducts(ctx context.Context, q url.Values, col dbiface.CollectionAPI) ([]Product, error) {
+func findProducts(ctx context.Context, q url.Values, col dbiface.CollectionAPI) ([]Product, *echo.HTTPError) {
 	var products []Product
 	filter := make(map[string]interface{})
 	for k, v := range q {
@@ -57,19 +57,19 @@ func findProducts(ctx context.Context, q url.Values, col dbiface.CollectionAPI) 
 		id, err := primitive.ObjectIDFromHex(filter["_id"].(string))
 		if err != nil {
 			log.Errorf("Unable to convert id to object id: %v", err)
-			return nil, err
+			return products, echo.NewHTTPError(http.StatusInternalServerError, "Unable to convert id to object id")
 		}
 		filter["_id"] = id
 	}
 	cursor, err := col.Find(ctx, bson.M(filter))
 	if err != nil {
 		log.Errorf("Unable to find the products: %v", err)
-		return nil, err
+		return products, echo.NewHTTPError(http.StatusNotFound, "Unable to find the products")
 	}
 	err = cursor.All(ctx, &products)
 	if err != nil {
 		log.Errorf("Unable to decode the cursor to products: %v", err)
-		return nil, err
+		return products, echo.NewHTTPError(http.StatusUnprocessableEntity, "Unable to find the products")
 	}
 	return products, nil
 }
@@ -78,23 +78,23 @@ func findProducts(ctx context.Context, q url.Values, col dbiface.CollectionAPI) 
 func (h *ProductHandler) GetProducts(c echo.Context) error {
 	products, err := findProducts(context.Background(), c.QueryParams(), h.Col)
 	if err != nil {
-		return err
+		return c.JSON(err.Code, err.Message)
 	}
 	return c.JSON(http.StatusOK, products)
 }
 
-func findProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (Product, error) {
+func findProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (Product, *echo.HTTPError) {
 	var product Product
 	docID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		log.Errorf("cannot convert to ObjectID :%v", err)
-		return product, err
+		return product, echo.NewHTTPError(http.StatusInternalServerError, "Unable to convert id to object id")
 	}
 	filter := bson.M{"_id": docID}
 	res := col.FindOne(ctx, filter)
 	if err := res.Decode(&product); err != nil {
 		log.Errorf("unable to decode to product :%v", err)
-		return product, err
+		return product, echo.NewHTTPError(http.StatusUnprocessableEntity, "Unable to find the product")
 	}
 	return product, nil
 }
@@ -103,22 +103,22 @@ func findProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (Pro
 func (h *ProductHandler) GetProduct(c echo.Context) error {
 	product, err := findProduct(context.Background(), c.Param("id"), h.Col)
 	if err != nil {
-		return err
+		return c.JSON(err.Code, err.Message)
 	}
 	return c.JSON(http.StatusOK, product)
 }
 
-func deleteProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (int64, error) {
+func deleteProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (int64, *echo.HTTPError) {
 	docID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		log.Errorf("cannot convert to ObjectID :%v", err)
-		return 0, err
+		return 0, echo.NewHTTPError(http.StatusInternalServerError, "Unable to convert id to object id")
 	}
 	filter := bson.M{"_id": docID}
 	res, err := col.DeleteOne(ctx, filter)
 	if err != nil {
 		log.Errorf("unable to delete the product :%v", err)
-		return 0, err
+		return 0, echo.NewHTTPError(http.StatusInternalServerError, "Unable to delete the product")
 	}
 	return res.DeletedCount, nil
 }
@@ -127,20 +127,20 @@ func deleteProduct(ctx context.Context, id string, col dbiface.CollectionAPI) (i
 func (h *ProductHandler) DeleteProduct(c echo.Context) error {
 	delCount, err := deleteProduct(context.Background(), c.Param("id"), h.Col)
 	if err != nil {
-		return err
+		return c.JSON(err.Code, err.Message)
 	}
 	return c.JSON(http.StatusOK, delCount)
 }
 
-func insertProducts(ctx context.Context, products []Product, col dbiface.CollectionAPI) ([]interface{}, error) {
+func insertProducts(ctx context.Context, products []Product, col dbiface.CollectionAPI) ([]interface{}, *echo.HTTPError) {
 	var insertedIds []interface{}
 
 	for _, product := range products {
 		product.ID = primitive.NewObjectID()
 		insertID, err := col.InsertOne(ctx, product)
 		if err != nil {
-			log.Errorf("Unable to insert: %v", err)
-			return nil, err
+			log.Errorf("Unable to insert to database: %v", err)
+			return nil, echo.NewHTTPError(http.StatusInternalServerError, "Unable to insert to database")
 		}
 		insertedIds = append(insertedIds, insertID.InsertedID)
 	}
@@ -153,54 +153,54 @@ func (h *ProductHandler) CreateProducts(c echo.Context) error {
 	c.Echo().Validator = &ProductValidator{validator: v}
 	if err := c.Bind(&products); err != nil {
 		log.Errorf("Unable to bind the request: %v", err)
-		return err
+		return c.JSON(http.StatusUnprocessableEntity, "Unable to bind the request")
 	}
 	for _, product := range products {
 		if err := c.Validate(product); err != nil {
 			log.Errorf("Unable to validate the product %+v: %v", product, err)
-			return err
+			return c.JSON(http.StatusBadRequest, "Unable to validate request payload")
 		}
 	}
 	IDs, err := insertProducts(context.Background(), products, h.Col)
 	if err != nil {
-		return err
+		return c.JSON(err.Code, err.Message)
 	}
 
 	return c.JSON(http.StatusCreated, IDs)
 }
 
-func modifyProduct(ctx context.Context, id string, reqBody io.ReadCloser, collection dbiface.CollectionAPI) (Product, error) {
+func modifyProduct(ctx context.Context, id string, reqBody io.ReadCloser, collection dbiface.CollectionAPI) (Product, *echo.HTTPError) {
 	var product Product
 	// convert the id to ObjectID, if err return 400
 	docID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		log.Errorf("cannot convert to ObjectID :%v", err)
-		return product, err
+		return product, echo.NewHTTPError(http.StatusInternalServerError, "Unable to convert id to object id")
 	}
 	filter := bson.M{"_id": docID}
 	res := collection.FindOne(ctx, filter)
 	if err := res.Decode(&product); err != nil {
 		log.Errorf("unable to decode to product :%v", err)
-		return product, err
+		return product, echo.NewHTTPError(http.StatusUnprocessableEntity, "Unable to find the product")
 	}
 
 	//decode the request body to product, if err return 500
 	if err := json.NewDecoder(reqBody).Decode(&product); err != nil {
 		log.Errorf("unable to decode using reqbody : %v", err)
-		return product, err
+		return product, echo.NewHTTPError(http.StatusUnprocessableEntity, "Unable to parse the request payload")
 	}
 
 	// validate the product, if err return 400
 	if err := v.Struct(product); err != nil {
 		log.Errorf("unable to validate the struct : %v", err)
-		return product, err
+		return product, echo.NewHTTPError((http.StatusBadRequest), "Unable to validate the request payload")
 	}
 
 	// update the product, if err return 500
 	_, err = collection.UpdateOne(ctx, filter, bson.M{"$set": product})
 	if err != nil {
 		log.Errorf("Unable to update the product : %v", err)
-		return product, err
+		return product, echo.NewHTTPError(http.StatusInternalServerError, "Unable to update the product")
 	}
 	return product, nil
 }
@@ -209,7 +209,7 @@ func modifyProduct(ctx context.Context, id string, reqBody io.ReadCloser, collec
 func (h *ProductHandler) UpdateProduct(c echo.Context) error {
 	product, err := modifyProduct(context.Background(), c.Param("id"), c.Request().Body, h.Col)
 	if err != nil {
-		return err
+		return c.JSON(err.Code, err.Message)
 	}
 	return c.JSON(http.StatusOK, product)
 }
