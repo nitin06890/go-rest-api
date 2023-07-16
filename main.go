@@ -45,9 +45,13 @@ func init() {
 func main() {
 	e := echo.New()
 	e.Logger.SetLevel(log.ERROR)
-	h := &handlers.ProductHandler{Col: col}
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: `${time_rfc3339} ${remote_ip} ${host} ${method} ${uri} ${user_agent} ` + 
+		`${status} ${error} ${latency_human}` + "\n",
+	}))
+	h := &handlers.ProductHandler{Col: col}
 	e.GET("/products", h.GetProducts)
 	e.GET("/products/:id", h.GetProduct)
 	e.DELETE("/products/:id", h.DeleteProduct)
