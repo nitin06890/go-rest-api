@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/gommon/random"
 	"github.com/nitin06890/go-rest-api/config"
 	"github.com/nitin06890/go-rest-api/handlers"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -21,10 +22,12 @@ const (
 )
 
 var (
-	// c   *mongo.Client
-	db  *mongo.Database
-	col *mongo.Collection
-	cfg config.Properties
+	c        *mongo.Client
+	db       *mongo.Database
+	prodCol  *mongo.Collection
+	usersCol *mongo.Collection
+	cfg      config.Properties
+	err      error
 )
 
 func init() {
@@ -34,12 +37,25 @@ func init() {
 	ctx := context.Background()
 
 	connectURI := fmt.Sprintf("mongodb://%s:%s", cfg.DBHost, cfg.DBPort)
-	c, err := mongo.Connect(ctx, options.Client().ApplyURI(connectURI))
+	c, err = mongo.Connect(ctx, options.Client().ApplyURI(connectURI))
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v", err)
 	}
 	db = c.Database(cfg.DBName)
-	col = db.Collection(cfg.CollectionName)
+	prodCol = db.Collection(cfg.ProductCollection)
+	usersCol = db.Collection(cfg.UsersCollection)
+
+	isUserIndexUnique := true
+	indexmodel := mongo.IndexModel{
+		Keys: bson.D{{Key: "username", Value: 1}},
+		Options: &options.IndexOptions{
+			Unique: &isUserIndexUnique,
+		},
+	}
+
+	if _, err := usersCol.Indexes().CreateOne(ctx, indexmodel); err != nil {
+		log.Fatalf("Unable to create index: %v", err)
+	}
 }
 
 func main() {
@@ -48,16 +64,18 @@ func main() {
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-		Format: `${time_rfc3339} ${remote_ip} ${host} ${method} ${uri} ${user_agent} ` + 
-		`${status} ${error} ${latency_human}` + "\n",
+		Format: `${time_rfc3339} ${remote_ip} ${header:X-Correlation-ID} ${host} ${method} ${uri} ${user_agent} ` +
+			`${status} ${error} ${latency_human}` + "\n",
 	}))
-	h := &handlers.ProductHandler{Col: col}
+	h := &handlers.ProductHandler{Col: prodCol}
+	uh := &handlers.UsersHandler{Col: usersCol}
 	e.GET("/products", h.GetProducts)
 	e.GET("/products/:id", h.GetProduct)
 	e.DELETE("/products/:id", h.DeleteProduct)
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
 	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
 
+	e.POST("/users", uh.CreateUser, middleware.BodyLimit("1M"))
 	e.Logger.Info("Listening on %s:%s ", cfg.Host, cfg.Port)
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)))
 }
