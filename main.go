@@ -76,6 +76,7 @@ func main() {
 	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
 
 	e.POST("/users", uh.CreateUser, middleware.BodyLimit("1M"))
+	e.POST("/auth", uh.AuthnUser)
 	e.Logger.Info("Listening on %s:%s ", cfg.Host, cfg.Port)
 	e.Logger.Fatal(e.Start(fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)))
 }
