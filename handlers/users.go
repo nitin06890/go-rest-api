@@ -57,6 +57,12 @@ func (h *UsersHandler) CreateUser(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	token, er := user.generateToken()
+	if er != nil {
+		log.Errorf("Unable to generate token: %v", er)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Unable to generate token")
+	}
+	c.Response().Header().Set("x-auth-token", token)
 	return c.JSON(http.StatusCreated, insertedUserID)
 }
 
@@ -112,7 +118,7 @@ func (h *UsersHandler) AuthnUser(ctx echo.Context) error {
 		log.Errorf("Unable to generate token: %v", err)
 		return ctx.JSON(http.StatusInternalServerError, "Unable to generate token")
 	}
-	ctx.Response().Header().Set("x-auth-token", token)
+	ctx.Response().Header().Set("x-auth-token", "Bearer "+token)
 	return ctx.JSON(http.StatusOK, User{Email: authenticatedUser.Email})
 }
 

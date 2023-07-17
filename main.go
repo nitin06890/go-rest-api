@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ilyakaznacheev/cleanenv"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -63,6 +64,10 @@ func main() {
 	e.Logger.SetLevel(log.ERROR)
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
+	jwtMiddleware := echojwt.WithConfig(echojwt.Config{
+		SigningKey: []byte(cfg.JwtTokenSecret),
+		TokenLookup: "header:x-auth-token",
+	})
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: `${time_rfc3339} ${remote_ip} ${header:X-Correlation-ID} ${host} ${method} ${uri} ${user_agent} ` +
 			`${status} ${error} ${latency_human}` + "\n",
@@ -71,9 +76,9 @@ func main() {
 	uh := &handlers.UsersHandler{Col: usersCol}
 	e.GET("/products", h.GetProducts)
 	e.GET("/products/:id", h.GetProduct)
-	e.DELETE("/products/:id", h.DeleteProduct)
-	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"))
-	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"))
+	e.DELETE("/products/:id", h.DeleteProduct, jwtMiddleware)
+	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"), jwtMiddleware)
+	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"), jwtMiddleware)
 
 	e.POST("/users", uh.CreateUser, middleware.BodyLimit("1M"))
 	e.POST("/auth", uh.AuthnUser)
