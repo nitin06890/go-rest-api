@@ -1,66 +1,17 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/labstack/echo/v4"
-	"github.com/nitin06890/go-rest-api/config"
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/labstack/echo/v4"
 )
-
-var (
-	db       *mongo.Database
-	col      *mongo.Collection
-	usersCol *mongo.Collection
-	cfg      config.Properties
-	h        ProductHandler
-)
-
-func init() {
-	if err := cleanenv.ReadEnv(&cfg); err != nil {
-		log.Fatalf("Configuration cannot be read: %v", err)
-	}
-
-	connectURI := fmt.Sprintf("mongodb://%s:%s", cfg.DBHost, cfg.DBPort)
-
-	c, err := mongo.Connect(context.Background(), options.Client().ApplyURI(connectURI))
-	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
-	}
-	db = c.Database(cfg.DBName)
-	col = db.Collection(cfg.ProductCollection)
-	usersCol = db.Collection(cfg.UsersCollection)
-	isUserIndexUnique := true
-	indexModel := mongo.IndexModel{
-		Keys: bson.M{"username": 1},
-		Options: &options.IndexOptions{
-			Unique: &isUserIndexUnique,
-		},
-	}
-	_, err = usersCol.Indexes().CreateOne(context.Background(), indexModel)
-	if err != nil {
-		log.Fatalf("Unable to create an index : %+v", err)
-	}
-}
-
-func TestMain(m *testing.M) {
-	testCode := m.Run()
-	col.Drop(context.Background())
-	db.Drop(context.Background())
-	os.Exit(testCode)
-}
 
 func TestProduct(t *testing.T) {
 	var docID string
@@ -139,8 +90,8 @@ func TestProduct(t *testing.T) {
 		res := httptest.NewRecorder()
 		e := echo.New()
 		c := e.NewContext(req, res)
-		c.SetParamNames("id")
-		c.SetParamValues(docID)
+		c.SetParamNames("id")                      
+		c.SetParamValues(docID) 
 		h.Col = col
 		err := h.GetProduct(c)
 		assert.Nil(t, err)
