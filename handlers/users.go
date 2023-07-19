@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
@@ -118,7 +118,7 @@ func (h *UsersHandler) AuthnUser(ctx echo.Context) error {
 		log.Errorf("Unable to generate token: %v", err)
 		return ctx.JSON(http.StatusInternalServerError, "Unable to generate token")
 	}
-	ctx.Response().Header().Set("x-auth-token", "Bearer "+token)
+	ctx.Response().Header().Set("x-auth-token", token)
 	return ctx.JSON(http.StatusOK, User{Email: authenticatedUser.Email})
 }
 

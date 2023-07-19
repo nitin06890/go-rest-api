@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ilyakaznacheev/cleanenv"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
@@ -65,7 +67,7 @@ func main() {
 	e.Pre(middleware.RemoveTrailingSlash())
 	e.Pre(addCorrelationID)
 	jwtMiddleware := echojwt.WithConfig(echojwt.Config{
-		SigningKey: []byte(cfg.JwtTokenSecret),
+		SigningKey:  []byte(cfg.JwtTokenSecret),
 		TokenLookup: "header:x-auth-token",
 	})
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
@@ -76,7 +78,7 @@ func main() {
 	uh := &handlers.UsersHandler{Col: usersCol}
 	e.GET("/products", h.GetProducts)
 	e.GET("/products/:id", h.GetProduct)
-	e.DELETE("/products/:id", h.DeleteProduct, jwtMiddleware)
+	e.DELETE("/products/:id", h.DeleteProduct, jwtMiddleware, adminMiddleware)
 	e.POST("/products", h.CreateProducts, middleware.BodyLimit("1M"), jwtMiddleware)
 	e.PUT("/products/:id", h.UpdateProduct, middleware.BodyLimit("1M"), jwtMiddleware)
 
@@ -97,6 +99,23 @@ func addCorrelationID(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		c.Request().Header.Set(CorrelationID, newID)
 		c.Response().Header().Set(CorrelationID, newID)
+		return next(c)
+	}
+}
+
+func adminMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		token := c.Request().Header.Get("x-auth-token")
+		claims := jwt.MapClaims{}
+		_, err := jwt.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) {
+			return []byte(cfg.JwtTokenSecret), nil
+		})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "Unable to parse token")
+		}
+		if !claims["authorized"].(bool) {
+			return echo.NewHTTPError(http.StatusForbidden, "Not authorized")
+		}
 		return next(c)
 	}
 }
