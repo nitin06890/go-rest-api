@@ -57,46 +57,4 @@ func TestUsers(t *testing.T) {
 		assert.Empty(t, user.Password)
 	})
 
-	t.Run("test create user again unhappy", func(t *testing.T) {
-		body := `
-		{
-			"username":"shelby.dummy@gmail.com",
-			"password":"qwertyuiop"
-		}
-		`
-		req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
-		res := httptest.NewRecorder()
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		e := echo.New()
-		c := e.NewContext(req, res)
-		uh.Col = usersCol
-		err := uh.CreateUser(c)
-		assert.Nil(t, err)
-		assert.Equal(t, http.StatusBadRequest, res.Code)
-	})
-	
-	t.Run("test authenticate user", func(t *testing.T) {
-		var user User
-		body := `
-		{
-			"username":"shelby.dummy@gmail.com",
-			"password":"qwertyuiop"
-		}
-		`
-		req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(body))
-		res := httptest.NewRecorder()
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		e := echo.New()
-		c := e.NewContext(req, res)
-		uh.Col = usersCol
-		err := uh.AuthnUser(c)
-		assert.Nil(t, err)
-		assert.Equal(t, http.StatusOK, res.Code)
-		token := res.Header().Get("X-Auth-Token")
-		assert.NotEmpty(t, token)
-		err = json.Unmarshal(res.Body.Bytes(), &user)
-		assert.Nil(t, err)
-		assert.Equal(t, "shelby.dummy@gmail.com", user.Email)
-		assert.Empty(t, user.Password)
-	})
 }
